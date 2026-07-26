@@ -26,14 +26,14 @@ variables {
   ami_id = "ami-00000000000000000"
 }
 
-# Whole-stack plan, compute included: proves the full graph resolves.
+# Whole-stack plan, compute included: proves the full resource graph, the
+# provider schema, and every expression resolve. There is deliberately no
+# assert block here - resource IDs are unknown until apply, so asserting on
+# one in a plan run fails with "Unknown condition value". The plan
+# succeeding without error IS the assertion; terraform test fails the run if
+# the plan errors.
 run "full_stack_plan_resolves" {
   command = plan
-
-  assert {
-    condition     = module.vpc.vpc_id != null
-    error_message = "VPC did not resolve in the plan"
-  }
 }
 
 # Real apply of everything LocalStack Community actually supports.
