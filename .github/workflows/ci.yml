@@ -16,11 +16,11 @@ jobs:
           - 4566:4566
         env:
           SERVICES: ec2,iam,s3,sts,cloudwatch,sns
-        options: >-
-          --health-cmd "curl -s http://localhost:4566/_localstack/health | grep -q running"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 20
+        # No --health-cmd here deliberately: the LocalStack image doesn't
+        # ship curl, so a curl-based Docker healthcheck reports "unhealthy"
+        # forever even once LocalStack itself has logged "Ready." (learned
+        # the hard way - see the "Wait for LocalStack" step below, which
+        # polls from the runner instead of inside the container).
     steps:
       - uses: actions/checkout@v4
 
