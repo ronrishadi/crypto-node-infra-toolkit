@@ -1,0 +1,46 @@
+[Unit]
+Description=Blockchain node
+Documentation=https://github.com/ronrishadi/crypto-node-infra-toolkit
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=chainnode
+Group=chainnode
+WorkingDirectory=/data/chain
+ExecStart=/usr/local/bin/chaind start --home /data/chain
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=90
+
+# --- Hardening: least privilege for a process that talks to the network
+# and holds no secrets of its own beyond its validator/node key files. ---
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data/chain
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+
+# Resource limits so a runaway process degrades predictably instead of
+# taking the whole host down with it.
+LimitNOFILE=65536
+CPUQuota=200%
+MemoryMax=6G
+
+# systemd's own log rate limiting, separate from the logrotate config in
+# scripts/ - this caps how fast a crash-looping unit can flood the journal.
+LogRateLimitIntervalSec=30
+LogRateLimitBurst=1000
+
+[Install]
+WantedBy=multi-user.target

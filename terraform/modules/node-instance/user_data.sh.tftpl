@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Minimal cloud-init bootstrap: format+mount the chain-data volume and drop
+# a marker file. The real setup (package install, systemd unit, users) is
+# done by scripts/bootstrap-node.sh, run idempotently over SSH/SSM rather
+# than baked into user_data - that keeps the provisioning step re-runnable
+# and testable outside of an EC2 launch.
+set -euo pipefail
+
+if [ ! -b /dev/nvme1n1 ] && [ ! -b /dev/xvdf ]; then
+  echo "chain-data device not yet visible, skipping mount (bootstrap script will retry)"
+  exit 0
+fi
+
+DEVICE="/dev/nvme1n1"
+[ -b "$DEVICE" ] || DEVICE="/dev/xvdf"
+
+if ! blkid "$DEVICE" >/dev/null 2>&1; then
+  mkfs.ext4 -L chaindata "$DEVICE"
+fi
+
+mkdir -p "${data_mount}"
+mount "$DEVICE" "${data_mount}" || true
+grep -q "${data_mount}" /etc/fstab || echo "LABEL=chaindata ${data_mount} ext4 defaults,nofail 0 2" >> /etc/fstab
+
+id -u "${node_user}" >/dev/null 2>&1 || useradd --system --create-home --shell /usr/sbin/nologin "${node_user}"
+chown -R "${node_user}:${node_user}" "${data_mount}"
+
+touch /var/log/cloud-init-bootstrap-complete

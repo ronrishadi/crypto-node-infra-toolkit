@@ -1,0 +1,98 @@
+name: ci
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+    services:
+      localstack:
+        image: localstack/localstack:3
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: ec2,iam,s3,sts,cloudwatch,sns
+        options: >-
+          --health-cmd "curl -s http://localhost:4566/_localstack/health | grep -q running"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.8"
+
+      - name: terraform fmt -check
+        run: terraform fmt -check -recursive terraform/
+
+      - name: terraform init
+        working-directory: terraform/environments/dev
+        run: terraform init -backend=false
+
+      - name: terraform validate
+        working-directory: terraform/environments/dev
+        run: terraform validate
+
+      - name: Set up tflint
+        uses: terraform-linters/setup-tflint@v4
+
+      - name: tflint
+        working-directory: terraform
+        run: |
+          tflint --init
+          tflint --recursive
+
+      - name: Static security scan (checkov)
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: terraform
+          quiet: true
+          soft_fail: true # report findings without failing the build - this repo documents accepted risk, doesn't hide it
+
+      - name: Wait for LocalStack
+        run: |
+          for i in $(seq 1 20); do
+            curl -sf http://localhost:4566/_localstack/health && break
+            sleep 3
+          done
+
+      - name: terraform test (apply + assert + destroy, against LocalStack)
+        working-directory: terraform/environments/dev
+        env:
+          AWS_ACCESS_KEY_ID: test
+          AWS_SECRET_ACCESS_KEY: test
+          AWS_DEFAULT_REGION: us-east-1
+        run: terraform test
+
+  scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Shellcheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "./scripts"
+
+      - name: Install bats
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y bats
+
+      - name: Run bats test suite
+        run: bats scripts/tests/
+
+      - name: Validate systemd unit syntax
+        run: |
+          sudo apt-get install -y systemd
+          systemd-analyze verify systemd/chainnode.service || true
+          # systemd-analyze verify can fail on ExecStart binaries that don't
+          # exist on the CI runner (chaind is installed on the real node,
+          # not here) - so this step reports but does not gate the build.
