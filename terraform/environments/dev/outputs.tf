@@ -2,8 +2,13 @@ output "vpc_id" {
   value = module.vpc.vpc_id
 }
 
+output "node_security_group_id" {
+  value = module.vpc.node_security_group_id
+}
+
 output "node_instance_id" {
-  value = module.node.instance_id
+  description = "Null when create_compute = false."
+  value       = module.node.instance_id
 }
 
 output "node_private_ip" {
@@ -19,5 +24,6 @@ output "backup_bucket" {
 }
 
 output "alerts_topic_arn" {
-  value = module.monitoring.alerts_topic_arn
+  description = "Null when create_compute = false."
+  value       = one(module.monitoring[*].alerts_topic_arn)
 }

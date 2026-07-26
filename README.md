@@ -27,13 +27,38 @@ decision with the reasoning behind it.
 
 | Claim | Where it's proven |
 | --- | --- |
-| Terraform authored and applied, understands state/plan/apply | `terraform test` runs a real `apply` against LocalStack in CI, asserts on real outputs, then tears it down - see `terraform/environments/dev/tests/localstack_apply.tftest.hcl` |
-| AWS: EC2, VPC, IAM, S3, CloudWatch | One module each, wired together in `terraform/environments/dev/main.tf`; all four services are live-tested against LocalStack, not just written and hoped-for |
+| Terraform authored and applied, understands state/plan/apply | `terraform test` in CI runs a real `apply` against LocalStack for the VPC / security group / S3 / IAM layer, asserts on the live outputs, then destroys it - plus a whole-stack `plan` run. Exact scope split below. See `terraform/environments/dev/tests/localstack_apply.tftest.hcl` |
+| AWS: EC2, VPC, IAM, S3, CloudWatch | One module each, wired together in `terraform/environments/dev/main.tf`. VPC, S3, and IAM are apply-tested for real; EC2 and CloudWatch are plan-tested only (LocalStack Community limitation, see below) |
 | Terraform variable validation, not just happy-path code | A dedicated test asserts that `ssh_allowed_cidrs = ["0.0.0.0/0"]` is **rejected** at plan time, not just discouraged in a comment |
 | Linux administration: systemd, package mgmt, log analysis | `systemd/chainnode.service` (hardened unit), `scripts/bootstrap-node.sh` (idempotent setup), `scripts/log-analyze.sh` (log triage) |
 | Bash scripting for automation/diagnostics | `scripts/node-healthcheck.sh`, `scripts/backup-to-s3.sh` - both covered by `bats` tests that mock `systemctl`/`curl`/`df`/`aws`/`journalctl` rather than requiring a real node to test against |
 | Credential and access hygiene | IAM policy scoped to one S3 prefix and one CloudWatch namespace (see below), IMDSv2-only, encrypted EBS/S3, no secrets in code, `.gitignore` excludes `*.tfvars`/state |
 | Git workflow | Real commit history, CI on every push, `.terraform.lock.hcl` committed per Terraform convention |
+
+## What is apply-tested vs plan-tested, precisely
+
+I'd rather state this exactly than let "tested against LocalStack" imply
+more than it does.
+
+**Real `apply` + assert + `destroy` in CI** (LocalStack Community emulates
+these well enough to be meaningful): VPC, public subnet, internet gateway,
+route table + association, node security group, S3 backup bucket with
+versioning / SSE / public-access-block, and the least-privilege IAM role,
+policy document and instance profile.
+
+**`plan` only:** the EC2 instance, its encrypted EBS data volume, the S3
+lifecycle rule, and the CloudWatch alarms + SNS topic. LocalStack Community
+cannot serve the instance-settings read the AWS provider issues immediately
+after instance creation, and does not converge S3 lifecycle configuration -
+in both cases an `apply` hangs until timeout rather than failing cleanly, so
+asserting on it would be theatre. The plan run still exercises the complete
+resource graph, the real provider schema, and every expression and
+interpolation in the stack.
+
+This split is why `create_compute` and `enable_lifecycle_configuration`
+exist as variables. Both default to `true`; the LocalStack test sets them
+`false`. A real-AWS apply is still the actual acceptance test before
+production use, and I have not run one.
 
 ## Least privilege, concretely
 
@@ -99,10 +124,10 @@ bats scripts/tests/
 
 ## Honest limitations
 
-- LocalStack Community emulates enough of EC2/VPC/IAM/S3/CloudWatch/SNS to
-  prove the Terraform is well-formed and internally consistent; it is not a
-  byte-for-byte AWS emulation, and a real-AWS `apply` is the actual
-  acceptance test before production use.
+- LocalStack Community is not a byte-for-byte AWS emulation. See the
+  apply-vs-plan section above for exactly which resources are created for
+  real in CI and which are only planned. A real-AWS `apply` is the actual
+  acceptance test before production use, and has not been run.
 - The systemd unit's `ExecStart` targets a placeholder `chaind` binary -
   swap it for whatever the real node software is before use.
 - No autoscaling, no multi-AZ failover, no automated node-restore-from-backup

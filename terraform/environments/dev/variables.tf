@@ -55,6 +55,18 @@ variable "ami_id" {
   default     = null
 }
 
+variable "create_compute" {
+  description = "Create the EC2 instance, its data volume, and the CloudWatch alarms keyed to it. Leave true for real deployments; the LocalStack apply test sets false because LocalStack Community cannot serve the post-create instance-settings read, while VPC/S3/IAM apply for real."
+  type        = bool
+  default     = true
+}
+
+variable "enable_lifecycle_configuration" {
+  description = "Create the S3 backup lifecycle rule. Leave true for real deployments; the LocalStack apply test sets false because LocalStack Community does not converge lifecycle configuration."
+  type        = bool
+  default     = true
+}
+
 variable "node_ingress_ports" {
   type = list(object({
     port        = number

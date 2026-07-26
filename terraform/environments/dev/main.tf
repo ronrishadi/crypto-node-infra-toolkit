@@ -11,8 +11,9 @@ module "vpc" {
 module "backups" {
   source = "../../modules/backups"
 
-  bucket_name = var.backup_bucket_name
-  tags        = var.tags
+  bucket_name                    = var.backup_bucket_name
+  enable_lifecycle_configuration = var.enable_lifecycle_configuration
+  tags                           = var.tags
 }
 
 module "node" {
@@ -25,11 +26,15 @@ module "node" {
   instance_type     = var.instance_type
   ami_id            = var.ami_id
   ssh_key_name      = var.ssh_key_name
+  create_instance   = var.create_compute
   tags              = var.tags
 }
 
+# Monitoring alarms are keyed to a live instance id, so they only exist when
+# compute does.
 module "monitoring" {
   source = "../../modules/monitoring"
+  count  = var.create_compute ? 1 : 0
 
   name        = var.name
   instance_id = module.node.instance_id

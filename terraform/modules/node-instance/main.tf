@@ -3,7 +3,7 @@
 # other LocalStack run) pass ami_id explicitly instead - see
 # terraform/environments/dev/tests/localstack_apply.tftest.hcl.
 data "aws_ami" "ubuntu" {
-  count       = var.ami_id == null ? 1 : 0
+  count       = var.create_instance && var.ami_id == null ? 1 : 0
   most_recent = true
   owners      = ["099720109477"] # Canonical
 
@@ -14,7 +14,7 @@ data "aws_ami" "ubuntu" {
 }
 
 locals {
-  ami_id = var.ami_id != null ? var.ami_id : data.aws_ami.ubuntu[0].id
+  ami_id = var.ami_id != null ? var.ami_id : one(data.aws_ami.ubuntu[*].id)
 }
 
 # Least-privilege instance role: this instance can write its own backups to
@@ -82,6 +82,7 @@ resource "aws_iam_instance_profile" "node" {
 }
 
 resource "aws_instance" "node" {
+  count                  = var.create_instance ? 1 : 0
   ami                    = local.ami_id
   instance_type          = var.instance_type
   subnet_id              = var.subnet_id
@@ -112,7 +113,8 @@ resource "aws_instance" "node" {
 }
 
 resource "aws_ebs_volume" "chain_data" {
-  availability_zone = aws_instance.node.availability_zone
+  count             = var.create_instance ? 1 : 0
+  availability_zone = aws_instance.node[0].availability_zone
   size              = var.data_volume_gb
   type              = "gp3"
   encrypted         = true
@@ -120,7 +122,8 @@ resource "aws_ebs_volume" "chain_data" {
 }
 
 resource "aws_volume_attachment" "chain_data" {
+  count       = var.create_instance ? 1 : 0
   device_name = "/dev/sdf"
-  volume_id   = aws_ebs_volume.chain_data.id
-  instance_id = aws_instance.node.id
+  volume_id   = aws_ebs_volume.chain_data[0].id
+  instance_id = aws_instance.node[0].id
 }

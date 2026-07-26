@@ -29,6 +29,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "backups" {
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
+  count  = var.enable_lifecycle_configuration ? 1 : 0
   bucket = aws_s3_bucket.backups.id
 
   rule {

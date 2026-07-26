@@ -20,6 +20,12 @@ variable "instance_type" {
   default = "t3.medium"
 }
 
+variable "create_instance" {
+  description = "Create the EC2 instance and its data volume. Set false to provision only the IAM role/profile - used by the LocalStack apply test, because LocalStack Community cannot serve the instance-settings read the AWS provider performs after create, while it emulates IAM faithfully enough to test the least-privilege policy for real."
+  type        = bool
+  default     = true
+}
+
 variable "ami_id" {
   description = "Explicit AMI ID, bypassing the Canonical AMI lookup. Required when running against LocalStack, which does not carry a real AMI catalog; leave null against real AWS to use the latest Ubuntu 22.04 automatically."
   type        = string
